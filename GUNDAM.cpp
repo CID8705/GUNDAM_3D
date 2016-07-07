@@ -1,10 +1,10 @@
 #define _USE_MATH_DEFINES
 #include <math.h>
-#include <omp.h>
-#include <stdio.h>
+#include <process.h>
+#include <windows.h>
 #include "mglib.h"
-unsigned char color[10][3];
-const unsigned char color[10][3] = {
+const unsigned char color[10][3] =
+{
 	{ 232, 232, 232 },
 	{ 131, 131, 131 },
 	{ 82, 82, 82 },
@@ -16,7 +16,8 @@ const unsigned char color[10][3] = {
 	{ 0, 0, 0 },
 	{ 157, 126, 2 },
 };
-const float vertex[24723][3] = {
+const float vertex[24723][3] =
+{
 	{ -5.188700f, 0.426900f, 0.715600f },
 	{ -5.051600f, 0.451700f, 0.375500f },
 	{ -4.820000f, 0.493600f, -0.198900f },
@@ -24741,7 +24742,10 @@ const float vertex[24723][3] = {
 	{ 4.973700f, 18.889299f, 0.323100f },
 	{ 4.960100f, 18.891399f, 0.360400f },
 };
-float vertex[24723][3];
+typedef struct {
+	char DeviceContext[360][480];
+	unsigned char l;
+} ARGUMENT;
 void DrawLine(char DeviceContext[360][480], const unsigned short int x1, const unsigned short int y1, const unsigned short int x2, const unsigned short int y2, const unsigned char material) {
 	unsigned short int x = x1, y = y1, dx = abs(x2 - x1), dy = abs(y2 - y1), sx = (x2 > x1) ? 1 : -1, sy = (y2 > y1) ? 1 : -1;
 	if (dx >= dy) {
@@ -24804,15 +24808,17 @@ void DrawTriangle(char DeviceContext[360][480], const unsigned short int x1, con
 	}
 	return;
 }
-void mgPixel_r(const unsigned short int x, const unsigned short int y, const unsigned char mgLine_RED, const unsigned char mgLine_GRN, const unsigned char mgLine_BLU) {
-	if (mgCreate_VAL == NULL) {
-		mgMESSAGE();
-		exit(NULL);
+unsigned __stdcall fThread(void *argument) {
+	unsigned short int k;
+	for (k = 180; k > 50; --k) {
+		unsigned short int j;
+		for (j = 150; j < 340; ++j) {
+			if (((ARGUMENT *)argument)->DeviceContext[k][j] == ((ARGUMENT *)argument)->l) {
+				mgPixel(j, k);
+			}
+		}
 	}
-	EnterCriticalSection(&mgCritical_Section);
-	SetPixel(hBuffer, x + mgOffset_X, gws.cy - y - mgOffset_Y, RGB(mgLine_RED, mgLine_GRN, mgLine_BLU));
-	InvalidateRect(ghwnd, NULL, FALSE);
-	LeaveCriticalSection(&mgCritical_Section);
+	return EXIT_SUCCESS;
 }
 void ssort(unsigned short int face[48360][4], float zbuffer[48360]) {
 	unsigned short int i, increment = 8059;
@@ -73213,17 +73219,16 @@ int main() {
 		{ 24536, 24596, 24577, 3 },
 	};
 	float zbuffer[48360];
-	unsigned short int x, y;
 	mgOpenWindow(480, 360);
 	mgSetFillColor(0, 0, 0);
 	mgBackColor();
 	while (1) {
-		char DeviceContext[360][480];
 		int j, k;
 		float vector[24723][3];
-		for (j = 0; j < 360; ++j) {
-			for (k = 0; k < 480; ++k) {
-				DeviceContext[j][k] = -1;
+		ARGUMENT argument;
+		for (k = 0; k < 360; ++k) {
+			for (j = 0; j < 480; ++j) {
+				argument.DeviceContext[k][j] = -1;
 			}
 		}
 		for (j = 0; j < 24723; ++j) {
@@ -73246,17 +73251,23 @@ int main() {
 		}
 		ssort(face, zbuffer);
 		for (j = 0; j < 48360; ++j) {
-			DrawTriangle(DeviceContext, round(vector[face[j][0]][0] * 13) + 240, round(vector[face[j][0]][1] * 13) + 55, round(vector[face[j][1]][0] * 13) + 240, round(vector[face[j][1]][1] * 13) + 55, round(vector[face[j][2]][0] * 13) + 240, round(vector[face[j][2]][1] * 13) + 55, face[j][3]);
+			DrawTriangle(argument.DeviceContext, round(vector[face[j][0]][0] * 13) + 240, round(vector[face[j][0]][1] * 13) + 55, round(vector[face[j][1]][0] * 13) + 240, round(vector[face[j][1]][1] * 13) + 55, round(vector[face[j][2]][0] * 13) + 240, round(vector[face[j][2]][1] * 13) + 55, face[j][3]);
 		}
 		mgSetFillColor(0, 0, 0);
 		mgBackColor();
-#pragma omp parallel for private(k)
-		for (j = 310; j > 50; --j) {
-			for (k = 150; k < 340; ++k) {
-				if (DeviceContext[j][k] >= 0) {
-					mgPixel_r(k, j, color[DeviceContext[j][k]][0], color[DeviceContext[j][k]][1], color[DeviceContext[j][k]][2]);
+		for (argument.l = 0; argument.l < 10; ++argument.l) {
+			HANDLE hTread;
+			mgSetLineColor(color[argument.l][0], color[argument.l][1], color[argument.l][2]);
+			hTread = (HANDLE)_beginthreadex(NULL, 0, fThread, (void *)&argument, 0, NULL);
+			for (k = 310; k > 180; --k) {
+				for (j = 150; j < 340; ++j) {
+					if (argument.DeviceContext[k][j] == argument.l) {
+						mgPixel(j, k);
+					}
 				}
 			}
+			WaitForMultipleObjects(1, &hTread, TRUE, INFINITE);
+			CloseHandle(hTread);
 		}
 		if (i >= 360) {
 			if (mgMboxOkCan("Ç‡Ç§àÍìxâÒì]Ç≥ÇπÇ‹Ç∑Ç©ÅB") == mgOK) {
